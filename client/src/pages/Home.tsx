@@ -1,25 +1,35 @@
-import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { Streamdown } from 'streamdown';
+import { useEffect, useRef } from "react";
+import { initGame } from "../game/main";
 
-/**
- * All content in this page are only for example, replace with your own feature implementation
- * When building pages, remember your instructions in Frontend Best Practices, Design Guide and Common Pitfalls
- */
 export default function Home() {
-  // If theme is switchable in App.tsx, we can implement theme toggling like this:
-  // const { theme, toggleTheme } = useTheme();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const gameRef = useRef<ReturnType<typeof initGame> | null>(null);
+
+  useEffect(() => {
+    if (canvasRef.current && !gameRef.current) {
+      gameRef.current = initGame(canvasRef.current);
+    }
+    return () => {
+      if (gameRef.current) {
+        gameRef.current.destroy();
+        gameRef.current = null;
+      }
+    };
+  }, []);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <main>
-        {/* Example: lucide-react for icons */}
-        <Loader2 className="animate-spin" />
-        Example Page
-        {/* Example: Streamdown for markdown rendering */}
-        <Streamdown>Any **markdown** content</Streamdown>
-        <Button variant="default">Example Button</Button>
-      </main>
-    </div>
+    <canvas
+      ref={canvasRef}
+      id="game-canvas"
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100vw",
+        height: "100vh",
+        display: "block",
+        touchAction: "none",
+      }}
+    />
   );
 }
