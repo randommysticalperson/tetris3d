@@ -10,6 +10,7 @@ import {
   moveActive,
   rotateActive,
   hardDrop,
+  holdPieceAction,
   lockPiece,
   clearCompletedLayers,
   updateParticles,
@@ -18,6 +19,7 @@ import {
   getActiveCubes,
   getGhostCubes,
   getNextPieceCubes,
+  getHoldPieceCubes,
   getParticleCubes,
   GameState,
 } from "./gameLogic";
@@ -89,6 +91,7 @@ export function initGame(canvas: HTMLCanvasElement) {
     hud.hideGameOver();
     hud.hidePause();
     updateNextPieceDisplay();
+    hud.clearHoldPiece();
   }
 
   function togglePause() {
@@ -104,6 +107,23 @@ export function initGame(canvas: HTMLCanvasElement) {
   function updateNextPieceDisplay() {
     const blocks = normalizeBlocks([...state.nextPiece.blocks]);
     hud.drawNextPiece(blocks, state.nextPiece.color);
+  }
+
+  function updateHoldPieceDisplay() {
+    if (state.holdPiece) {
+      const blocks = normalizeBlocks([...state.holdPiece.blocks]);
+      hud.drawHoldPiece(blocks, state.holdPiece.color, state.holdUsed);
+    } else {
+      hud.clearHoldPiece();
+    }
+  }
+
+  function performHold() {
+    if (holdPieceAction(state)) {
+      playRotateSound();
+      updateNextPieceDisplay();
+      updateHoldPieceDisplay();
+    }
   }
 
   // HUD callbacks
@@ -124,6 +144,7 @@ export function initGame(canvas: HTMLCanvasElement) {
       case "rotY": if (rotateActive(state, "y")) playRotateSound(); break;
       case "rotZ": if (rotateActive(state, "z")) playRotateSound(); break;
       case "drop": hardDrop(state); playDropSound(); break;
+      case "hold": performHold(); break;
       case "pause": togglePause(); break;
     }
     updateNextPieceDisplay();
@@ -188,6 +209,10 @@ export function initGame(canvas: HTMLCanvasElement) {
         const dropped = hardDrop(state);
         state.score += dropped * 2;
         playDropSound();
+        break;
+      case "c":
+      case "C":
+        performHold();
         break;
     }
     updateNextPieceDisplay();

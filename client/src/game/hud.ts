@@ -11,6 +11,8 @@ export class HUD {
   levelEl: HTMLSpanElement;
   linesEl: HTMLSpanElement;
   nextCanvas: HTMLCanvasElement;
+  holdCanvas: HTMLCanvasElement;
+  holdPanel: HTMLDivElement;
   startScreen: HTMLDivElement;
   gameOverScreen: HTMLDivElement;
   pauseScreen: HTMLDivElement;
@@ -101,6 +103,26 @@ export class HUD {
           right: 16px;
           width: 140px;
           padding: 12px;
+        }
+
+        /* Left panel - hold piece */
+        .hud-left {
+          position: absolute;
+          top: 80px;
+          left: 16px;
+          width: 140px;
+          padding: 12px;
+        }
+
+        .hold-piece-canvas {
+          width: 116px;
+          height: 116px;
+          display: block;
+          margin: 0 auto;
+        }
+
+        .hud-left.hold-used {
+          opacity: 0.4;
         }
 
         .next-piece-canvas {
@@ -241,7 +263,9 @@ export class HUD {
           .hud-stat { padding: 6px 12px; }
           .hud-stat-value { font-size: 18px; }
           .hud-right { top: 60px; right: 8px; width: 100px; padding: 8px; }
+          .hud-left { top: 60px; left: 8px; width: 100px; padding: 8px; }
           .next-piece-canvas { width: 84px; height: 84px; }
+          .hold-piece-canvas { width: 84px; height: 84px; }
           .game-title { font-size: 28px; letter-spacing: 4px; }
         }
 
@@ -303,12 +327,19 @@ export class HUD {
         <canvas class="next-piece-canvas" id="next-piece-canvas" width="116" height="116"></canvas>
       </div>
 
+      <!-- Left panel - hold piece -->
+      <div class="hud-panel hud-left">
+        <div class="hud-panel-title">Hold <kbd style="font-size:9px;background:rgba(80,160,220,0.15);border:1px solid rgba(80,160,220,0.3);border-radius:3px;padding:1px 5px;font-family:'Orbitron',sans-serif;color:rgba(160,200,240,0.9);margin-left:4px;">C</kbd></div>
+        <canvas class="hold-piece-canvas" id="hold-piece-canvas" width="116" height="116"></canvas>
+      </div>
+
       <!-- Controls hint -->
       <div class="hud-panel hud-controls" id="hud-controls">
         <div><kbd>\u2190</kbd> <kbd>\u2192</kbd> <kbd>\u2191</kbd> <kbd>\u2193</kbd> Move</div>
         <div><kbd>Q</kbd> <kbd>E</kbd> Rotate XZ</div>
         <div><kbd>W</kbd> <kbd>S</kbd> Rotate Y</div>
         <div><kbd>Space</kbd> Hard Drop</div>
+        <div><kbd>C</kbd> Hold Piece</div>
         <div><kbd>P</kbd> Pause</div>
       </div>
 
@@ -327,6 +358,7 @@ export class HUD {
         <div class="mobile-row">
           <button class="mobile-btn" data-action="rotZ">\u21BB Z</button>
           <button class="mobile-btn mobile-btn-wide" data-action="drop">DROP</button>
+          <button class="mobile-btn" data-action="hold">HOLD</button>
           <button class="mobile-btn" data-action="pause">\u23F8</button>
         </div>
       </div>
@@ -357,6 +389,8 @@ export class HUD {
     this.levelEl = this.container.querySelector("#hud-level")!;
     this.linesEl = this.container.querySelector("#hud-lines")!;
     this.nextCanvas = this.container.querySelector("#next-piece-canvas")!;
+    this.holdCanvas = this.container.querySelector("#hold-piece-canvas")!;
+    this.holdPanel = this.container.querySelector(".hud-left")!;
     this.startScreen = this.container.querySelector("#start-screen")!;
     this.gameOverScreen = this.container.querySelector("#gameover-screen")!;
     this.pauseScreen = this.container.querySelector("#pause-screen")!;
@@ -454,6 +488,59 @@ export class HUD {
       ctx.fillStyle = `rgba(255, 255, 255, 0.15)`;
       ctx.fillRect(px + 2, py + 2, cellSize - 4, 3);
     }
+  }
+
+  drawHoldPiece(blocks: [number, number, number][], color: [number, number, number], holdUsed: boolean) {
+    const ctx = this.holdCanvas.getContext("2d")!;
+    const w = this.holdCanvas.width;
+    const h = this.holdCanvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Update panel opacity based on hold state
+    if (holdUsed) {
+      this.holdPanel.classList.add("hold-used");
+    } else {
+      this.holdPanel.classList.remove("hold-used");
+    }
+
+    if (blocks.length === 0) return;
+
+    // Find bounds
+    let maxX = 0, maxY = 0, maxZ = 0;
+    for (const [x, y, z] of blocks) {
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+      maxZ = Math.max(maxZ, z);
+    }
+
+    const cellSize = Math.min(w, h) / (Math.max(maxX, maxY, maxZ) + 2.5);
+    const offsetX = (w - (maxX + 1) * cellSize) / 2;
+    const offsetY = (h - (maxY + 1) * cellSize) / 2;
+
+    // Draw isometric-ish cubes
+    for (const [x, y, z] of blocks) {
+      const px = offsetX + x * cellSize + z * cellSize * 0.3;
+      const py = offsetY + (maxY - y) * cellSize - z * cellSize * 0.3;
+
+      // Top face (lighter)
+      ctx.fillStyle = `rgba(${Math.round(color[0] * 255 * 1.2)}, ${Math.round(color[1] * 255 * 1.2)}, ${Math.round(color[2] * 255 * 1.2)}, 0.9)`;
+      ctx.fillRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
+
+      // Border
+      ctx.strokeStyle = `rgba(${Math.round(color[0] * 255)}, ${Math.round(color[1] * 255)}, ${Math.round(color[2] * 255)}, 0.6)`;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
+
+      // Highlight
+      ctx.fillStyle = `rgba(255, 255, 255, 0.15)`;
+      ctx.fillRect(px + 2, py + 2, cellSize - 4, 3);
+    }
+  }
+
+  clearHoldPiece() {
+    const ctx = this.holdCanvas.getContext("2d")!;
+    ctx.clearRect(0, 0, this.holdCanvas.width, this.holdCanvas.height);
+    this.holdPanel.classList.remove("hold-used");
   }
 
   destroy() {

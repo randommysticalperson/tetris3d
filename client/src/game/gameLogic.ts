@@ -30,6 +30,10 @@ export interface GameState {
   // Next piece
   nextPiece: PieceDef;
 
+  // Hold piece
+  holdPiece: PieceDef | null;
+  holdUsed: boolean; // prevents infinite hold swapping per drop
+
   // Game state
   score: number;
   level: number;
@@ -79,6 +83,8 @@ export function createGameState(wellW = 6, wellH = 16, wellD = 6): GameState {
     activeBlocks: [],
     activePos: [0, 0, 0],
     nextPiece: getRandomPiece(),
+    holdPiece: null,
+    holdUsed: false,
     score: 0,
     level: 1,
     lines: 0,
@@ -124,6 +130,7 @@ export function spawnPiece(state: GameState): boolean {
   state.activePiece = state.nextPiece;
   state.nextPiece = getRandomPiece();
   state.activeBlocks = normalizeBlocks([...state.activePiece.blocks]);
+  state.holdUsed = false; // reset hold lock on new piece
 
   const bounds = getBlocksBounds(state.activeBlocks);
   const startX = Math.floor((state.wellW - bounds.maxX - 1) / 2);
@@ -136,6 +143,48 @@ export function spawnPiece(state: GameState): boolean {
     state.gameOver = true;
     return false;
   }
+  return true;
+}
+
+export function holdPieceAction(state: GameState): boolean {
+  if (!state.activePiece || state.gameOver || state.paused) return false;
+  if (state.holdUsed) return false; // can only hold once per drop
+
+  const currentPiece = state.activePiece;
+
+  if (state.holdPiece) {
+    // Swap hold with active
+    state.activePiece = state.holdPiece;
+    state.activeBlocks = normalizeBlocks([...state.activePiece.blocks]);
+
+    const bounds = getBlocksBounds(state.activeBlocks);
+    const startX = Math.floor((state.wellW - bounds.maxX - 1) / 2);
+    const startZ = Math.floor((state.wellD - bounds.maxZ - 1) / 2);
+    const startY = state.wellH - bounds.maxY - 1;
+    state.activePos = [startX, startY, startZ];
+
+    // If the swapped piece collides, revert
+    if (collides(state, state.activeBlocks, state.activePos)) {
+      state.activePiece = currentPiece;
+      state.activeBlocks = normalizeBlocks([...currentPiece.blocks]);
+      return false;
+    }
+  } else {
+    // No held piece yet - spawn next piece
+    state.activePiece = state.nextPiece;
+    state.nextPiece = getRandomPiece();
+    state.activeBlocks = normalizeBlocks([...state.activePiece.blocks]);
+
+    const bounds = getBlocksBounds(state.activeBlocks);
+    const startX = Math.floor((state.wellW - bounds.maxX - 1) / 2);
+    const startZ = Math.floor((state.wellD - bounds.maxZ - 1) / 2);
+    const startY = state.wellH - bounds.maxY - 1;
+    state.activePos = [startX, startY, startZ];
+  }
+
+  state.holdPiece = currentPiece;
+  state.holdUsed = true;
+  state.lastDrop = 0; // reset drop timer
   return true;
 }
 
@@ -396,6 +445,19 @@ export function getNextPieceCubes(state: GameState): CubeInstance[] {
     r: piece.color[0],
     g: piece.color[1],
     b: piece.color[2],
+  }));
+}
+
+export function getHoldPieceCubes(state: GameState): CubeInstance[] {
+  if (!state.holdPiece) return [];
+  const piece = state.holdPiece;
+  const blocks = normalizeBlocks([...piece.blocks]);
+  const dimFactor = state.holdUsed ? 0.5 : 1.0; // dim if hold already used
+  return blocks.map(([x, y, z]) => ({
+    x, y, z,
+    r: piece.color[0] * dimFactor,
+    g: piece.color[1] * dimFactor,
+    b: piece.color[2] * dimFactor,
   }));
 }
 
