@@ -19,9 +19,16 @@ export class HUD {
   controlsHint: HTMLDivElement;
   finalScoreEl: HTMLSpanElement;
 
+  muteBtn: HTMLButtonElement;
+  musicSlider: HTMLInputElement;
+  sfxSlider: HTMLInputElement;
+
   onStart: () => void = () => {};
   onRestart: () => void = () => {};
   onPause: () => void = () => {};
+  onToggleMute: () => void = () => {};
+  onMusicVolume: (v: number) => void = () => {};
+  onSfxVolume: (v: number) => void = () => {};
 
   constructor() {
     this.container = document.createElement("div");
@@ -123,6 +130,97 @@ export class HUD {
 
         .hud-left.hold-used {
           opacity: 0.4;
+        }
+
+        /* Audio controls panel */
+        .hud-audio {
+          position: absolute;
+          bottom: 16px;
+          right: 16px;
+          width: 160px;
+          padding: 12px;
+          pointer-events: auto;
+        }
+
+        .audio-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 6px;
+        }
+
+        .audio-row:last-child {
+          margin-bottom: 0;
+        }
+
+        .audio-label {
+          font-family: 'Rajdhani', sans-serif;
+          font-size: 11px;
+          font-weight: 500;
+          color: rgba(160, 200, 240, 0.7);
+          width: 38px;
+          flex-shrink: 0;
+        }
+
+        .audio-mute-btn {
+          background: rgba(80, 160, 220, 0.1);
+          border: 1px solid rgba(80, 160, 220, 0.3);
+          border-radius: 4px;
+          color: rgba(160, 200, 240, 0.9);
+          font-size: 16px;
+          width: 32px;
+          height: 32px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s;
+        }
+
+        .audio-mute-btn:hover {
+          background: rgba(80, 160, 220, 0.25);
+          border-color: rgba(100, 180, 240, 0.5);
+        }
+
+        .audio-mute-btn.muted {
+          color: rgba(160, 200, 240, 0.3);
+          border-color: rgba(80, 160, 220, 0.15);
+        }
+
+        .audio-slider {
+          -webkit-appearance: none;
+          appearance: none;
+          flex: 1;
+          height: 4px;
+          background: rgba(80, 160, 220, 0.2);
+          border-radius: 2px;
+          outline: none;
+          cursor: pointer;
+        }
+
+        .audio-slider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 12px;
+          height: 12px;
+          border-radius: 50%;
+          background: rgba(100, 180, 240, 0.8);
+          border: 1px solid rgba(140, 200, 255, 0.6);
+          cursor: pointer;
+          transition: transform 0.1s;
+        }
+
+        .audio-slider::-webkit-slider-thumb:hover {
+          transform: scale(1.3);
+        }
+
+        .audio-slider::-moz-range-thumb {
+          width: 12px;
+          height: 12px;
+          border-radius: 50%;
+          background: rgba(100, 180, 240, 0.8);
+          border: 1px solid rgba(140, 200, 255, 0.6);
+          cursor: pointer;
         }
 
         .next-piece-canvas {
@@ -264,6 +362,7 @@ export class HUD {
           .hud-stat-value { font-size: 18px; }
           .hud-right { top: 60px; right: 8px; width: 100px; padding: 8px; }
           .hud-left { top: 60px; left: 8px; width: 100px; padding: 8px; }
+          .hud-audio { bottom: 8px; right: 8px; width: 130px; padding: 8px; }
           .next-piece-canvas { width: 84px; height: 84px; }
           .hold-piece-canvas { width: 84px; height: 84px; }
           .game-title { font-size: 28px; letter-spacing: 4px; }
@@ -333,6 +432,22 @@ export class HUD {
         <canvas class="hold-piece-canvas" id="hold-piece-canvas" width="116" height="116"></canvas>
       </div>
 
+      <!-- Audio controls -->
+      <div class="hud-panel hud-audio" id="hud-audio">
+        <div class="hud-panel-title">Audio</div>
+        <div class="audio-row">
+          <button class="audio-mute-btn" id="audio-mute-btn" title="Toggle Mute (M)">&#x1f50a;</button>
+        </div>
+        <div class="audio-row">
+          <span class="audio-label">Music</span>
+          <input type="range" class="audio-slider" id="music-slider" min="0" max="100" value="40" />
+        </div>
+        <div class="audio-row">
+          <span class="audio-label">SFX</span>
+          <input type="range" class="audio-slider" id="sfx-slider" min="0" max="100" value="80" />
+        </div>
+      </div>
+
       <!-- Controls hint -->
       <div class="hud-panel hud-controls" id="hud-controls">
         <div><kbd>\u2190</kbd> <kbd>\u2192</kbd> <kbd>\u2191</kbd> <kbd>\u2193</kbd> Move</div>
@@ -340,6 +455,7 @@ export class HUD {
         <div><kbd>W</kbd> <kbd>S</kbd> Rotate Y</div>
         <div><kbd>Space</kbd> Hard Drop</div>
         <div><kbd>C</kbd> Hold Piece</div>
+        <div><kbd>M</kbd> Mute</div>
         <div><kbd>P</kbd> Pause</div>
       </div>
 
@@ -396,6 +512,19 @@ export class HUD {
     this.pauseScreen = this.container.querySelector("#pause-screen")!;
     this.controlsHint = this.container.querySelector("#hud-controls")!;
     this.finalScoreEl = this.container.querySelector("#final-score")!;
+
+    // Audio controls
+    this.muteBtn = this.container.querySelector("#audio-mute-btn")!;
+    this.musicSlider = this.container.querySelector("#music-slider")!;
+    this.sfxSlider = this.container.querySelector("#sfx-slider")!;
+
+    this.muteBtn.addEventListener("click", () => this.onToggleMute());
+    this.musicSlider.addEventListener("input", () => {
+      this.onMusicVolume(parseInt(this.musicSlider.value) / 100);
+    });
+    this.sfxSlider.addEventListener("input", () => {
+      this.onSfxVolume(parseInt(this.sfxSlider.value) / 100);
+    });
 
     // Button handlers
     this.container.querySelector("#btn-start")!.addEventListener("click", () => this.onStart());
@@ -541,6 +670,16 @@ export class HUD {
     const ctx = this.holdCanvas.getContext("2d")!;
     ctx.clearRect(0, 0, this.holdCanvas.width, this.holdCanvas.height);
     this.holdPanel.classList.remove("hold-used");
+  }
+
+  updateMuteState(muted: boolean) {
+    if (muted) {
+      this.muteBtn.classList.add("muted");
+      this.muteBtn.innerHTML = "&#x1f507;";
+    } else {
+      this.muteBtn.classList.remove("muted");
+      this.muteBtn.innerHTML = "&#x1f50a;";
+    }
   }
 
   destroy() {

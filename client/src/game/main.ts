@@ -25,10 +25,12 @@ import {
 } from "./gameLogic";
 import { normalizeBlocks } from "./pieces";
 import { HUD } from "./hud";
+import { AudioEngine } from "./audio";
 
 export function initGame(canvas: HTMLCanvasElement) {
   const renderer = new Renderer(canvas);
   const hud = new HUD();
+  const audio = new AudioEngine();
 
   // Well dimensions
   const WELL_W = 6;
@@ -36,6 +38,7 @@ export function initGame(canvas: HTMLCanvasElement) {
   const WELL_D = 6;
 
   let state = createGameState(WELL_W, WELL_H, WELL_D);
+  let prevLevel = 1;
 
   // Build well geometry
   renderer.buildGrid(WELL_W, WELL_D);
@@ -51,47 +54,18 @@ export function initGame(canvas: HTMLCanvasElement) {
   let lastMouseX = 0;
   let lastMouseY = 0;
 
-  // Audio context for simple sound effects
-  let audioCtx: AudioContext | null = null;
-  function getAudioCtx() {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    return audioCtx;
-  }
-
-  function playTone(freq: number, duration: number, type: OscillatorType = "sine", vol = 0.1) {
-    try {
-      const ctx = getAudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = type;
-      osc.frequency.value = freq;
-      gain.gain.value = vol;
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + duration);
-    } catch (_) {}
-  }
-
-  function playMoveSound() { playTone(300, 0.05, "square", 0.05); }
-  function playRotateSound() { playTone(500, 0.08, "sine", 0.06); }
-  function playDropSound() { playTone(150, 0.15, "triangle", 0.1); }
-  function playClearSound() { playTone(800, 0.3, "sine", 0.08); setTimeout(() => playTone(1000, 0.2, "sine", 0.06), 100); }
-  function playGameOverSound() { playTone(200, 0.5, "sawtooth", 0.08); setTimeout(() => playTone(150, 0.5, "sawtooth", 0.06), 200); }
-
   // Game functions
   function startGame() {
     state = createGameState(WELL_W, WELL_H, WELL_D);
     state.started = true;
+    prevLevel = 1;
     spawnPiece(state);
     hud.hideStart();
     hud.hideGameOver();
     hud.hidePause();
     updateNextPieceDisplay();
     hud.clearHoldPiece();
+    audio.startMusic();
   }
 
   function togglePause() {
@@ -120,7 +94,7 @@ export function initGame(canvas: HTMLCanvasElement) {
 
   function performHold() {
     if (holdPieceAction(state)) {
-      playRotateSound();
+      audio.playHold();
       updateNextPieceDisplay();
       updateHoldPieceDisplay();
     }
@@ -131,19 +105,31 @@ export function initGame(canvas: HTMLCanvasElement) {
   hud.onRestart = startGame;
   hud.onPause = togglePause;
 
+  // Audio control callbacks
+  hud.onToggleMute = () => {
+    const muted = audio.toggleMute();
+    hud.updateMuteState(muted);
+  };
+  hud.onMusicVolume = (v: number) => audio.setMusicVolume(v);
+  hud.onSfxVolume = (v: number) => audio.setSfxVolume(v);
+
   // Mobile controls
   hud.onMobileAction = (action: string) => {
     if (!state.started || state.gameOver) return;
     if (state.paused && action !== "pause") return;
     switch (action) {
-      case "moveLeft": if (moveActive(state, -1, 0, 0)) playMoveSound(); break;
-      case "moveRight": if (moveActive(state, 1, 0, 0)) playMoveSound(); break;
-      case "moveUp": if (moveActive(state, 0, 0, -1)) playMoveSound(); break;
-      case "moveDown": if (moveActive(state, 0, 0, 1)) playMoveSound(); break;
-      case "rotX": if (rotateActive(state, "x")) playRotateSound(); break;
-      case "rotY": if (rotateActive(state, "y")) playRotateSound(); break;
-      case "rotZ": if (rotateActive(state, "z")) playRotateSound(); break;
-      case "drop": hardDrop(state); playDropSound(); break;
+      case "moveLeft": if (moveActive(state, -1, 0, 0)) audio.playMove(); break;
+      case "moveRight": if (moveActive(state, 1, 0, 0)) audio.playMove(); break;
+      case "moveUp": if (moveActive(state, 0, 0, -1)) audio.playMove(); break;
+      case "moveDown": if (moveActive(state, 0, 0, 1)) audio.playMove(); break;
+      case "rotX": if (rotateActive(state, "x")) audio.playRotate(); break;
+      case "rotY": if (rotateActive(state, "y")) audio.playRotate(); break;
+      case "rotZ": if (rotateActive(state, "z")) audio.playRotate(); break;
+      case "drop":
+        const d = hardDrop(state);
+        state.score += d * 2;
+        audio.playHardDrop();
+        break;
       case "hold": performHold(); break;
       case "pause": togglePause(); break;
     }
@@ -165,50 +151,56 @@ export function initGame(canvas: HTMLCanvasElement) {
       return;
     }
 
+    if (e.key === "m" || e.key === "M") {
+      const muted = audio.toggleMute();
+      hud.updateMuteState(muted);
+      return;
+    }
+
     if (state.paused || state.gameOver) return;
 
     switch (e.key) {
       case "ArrowLeft":
         e.preventDefault();
-        if (moveActive(state, -1, 0, 0)) playMoveSound();
+        if (moveActive(state, -1, 0, 0)) audio.playMove();
         break;
       case "ArrowRight":
         e.preventDefault();
-        if (moveActive(state, 1, 0, 0)) playMoveSound();
+        if (moveActive(state, 1, 0, 0)) audio.playMove();
         break;
       case "ArrowUp":
         e.preventDefault();
-        if (moveActive(state, 0, 0, -1)) playMoveSound();
+        if (moveActive(state, 0, 0, -1)) audio.playMove();
         break;
       case "ArrowDown":
         e.preventDefault();
-        if (moveActive(state, 0, 0, 1)) playMoveSound();
+        if (moveActive(state, 0, 0, 1)) audio.playMove();
         break;
       case "q":
       case "Q":
-        if (rotateActive(state, "x")) playRotateSound();
+        if (rotateActive(state, "x")) audio.playRotate();
         break;
       case "e":
       case "E":
-        if (rotateActive(state, "z")) playRotateSound();
+        if (rotateActive(state, "z")) audio.playRotate();
         break;
       case "w":
       case "W":
-        if (rotateActive(state, "y")) playRotateSound();
+        if (rotateActive(state, "y")) audio.playRotate();
         break;
       case "s":
       case "S":
         // Soft drop
         if (moveActive(state, 0, -1, 0)) {
           state.score += 1;
-          playMoveSound();
+          audio.playSoftDrop();
         }
         break;
       case " ":
         e.preventDefault();
         const dropped = hardDrop(state);
         state.score += dropped * 2;
-        playDropSound();
+        audio.playHardDrop();
         break;
       case "c":
       case "C":
@@ -305,9 +297,16 @@ export function initGame(canvas: HTMLCanvasElement) {
       if (state.clearingLayers.length > 0) {
         state.clearTimer -= dt * 1000;
         if (state.clearTimer <= 0) {
+          const layerCount = state.clearingLayers.length;
           clearCompletedLayers(state);
-          playClearSound();
+          audio.playClear(layerCount);
           updateNextPieceDisplay();
+
+          // Check for level up
+          if (state.level > prevLevel) {
+            audio.playLevelUp();
+            prevLevel = state.level;
+          }
         }
       } else {
         // Gravity drop
@@ -317,10 +316,11 @@ export function initGame(canvas: HTMLCanvasElement) {
           if (!moveActive(state, 0, -1, 0)) {
             lockPiece(state);
             if (state.gameOver) {
-              playGameOverSound();
+              audio.playGameOver();
+              audio.stopMusic();
               hud.showGameOver(state.score);
             } else {
-              playDropSound();
+              audio.playLock();
               updateNextPieceDisplay();
             }
           }
@@ -389,9 +389,6 @@ export function initGame(canvas: HTMLCanvasElement) {
     if (particleCubes.length > 0) {
       renderer.drawCubes(proj, view, model, particleCubes, cameraPos, 2.0);
     }
-
-    // Draw next piece preview in a small viewport (top-right)
-    // This is handled by the HUD canvas instead
   }
 
   animId = requestAnimationFrame(gameLoop);
@@ -406,7 +403,7 @@ export function initGame(canvas: HTMLCanvasElement) {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
       hud.destroy();
-      if (audioCtx) audioCtx.close();
+      audio.destroy();
     },
   };
 }
